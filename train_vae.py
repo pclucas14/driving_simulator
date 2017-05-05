@@ -45,16 +45,16 @@ train_critic = theano.function(inputs=[images],
                                updates=critic_updates,
                                name='train_critic') #, on_unused_input='warn')
 
-train_gen = theano.function(inputs=[],
-                           outputs=[(fake_out).mean(), 
+train_gen =    theano.function(inputs=[],
+                               outputs=[(fake_out).mean(), 
                                     gen_loss,
                                     gen_grads_norm], 
-                           updates = gen_updates,
-                           name='train_gen') #, on_unused_input='warn')
+                               updates = gen_updates,
+                               name='train_gen') #, on_unused_input='warn')
 
-test_gen = theano.function(inputs=[],
-                           outputs=[gen_output], 
-                           name='test_gen', on_unused_input='warn')
+test_gen =     theano.function(inputs=[],
+                               outputs=[gen_output], 
+                               name='test_gen')#, on_unused_input='warn')
 
 '''
 training section 
