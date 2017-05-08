@@ -2,7 +2,7 @@ import numpy as np
 import h5py
 import scipy.misc
 from PIL import Image
-
+from model import * 
 def load_dataset(normalize=True, resize=True, sample=False):
     path = '/home/ml/lpagec/research/dataset/camera/'
 
@@ -79,19 +79,28 @@ def saveImage(imageData, epoch, side=8):
     imageData = imageData.transpose(0,2,3,1).astype('uint8')
 
     #creates a new empty image, RGB mode, and size 400 by 400.
-    new_im = Image.new('RGB', (80*side,160*side))
+    new_im = Image.new('RGB', (160*side,80*side))
     
     # imageData = imageData.reshape((-1,64,64,3))
     
     #Iterate through a 4 by 4 grid with 100 spacing, to place my image
     index = 0
-    for i in xrange(0,(side)*80,80):
-        for j in xrange(0,(side)*160,160):
+    for i in xrange(0,(side)*160,160):
+        for j in xrange(0,(side)*80,80):
             #paste the image at location i,j:
             img = Image.fromarray(imageData[index])
             #img.show()
             new_im.paste(img, (i,j))
             index += 1
 
-    new_im.save('sample_epoch' + str(epoch) + '.png')
-    #new_im.save(home + 'images/' + imageName+ '_epoch' + str(epoch) + '.png')
+    new_im.save('/home/ml/lpagec/driving_simulator/images/' + 'sample_epoch' + str(epoch) + '.png')
+
+def save_model(model, model_name, epoch):
+    np.savez('models/' + str(model_name) + '_' + str(epoch) + '.npz', *ll.get_all_param_values(model))
+
+def load_model(model, model_name, epoch):
+    param_path = 'models/' + str(model_name) + '_' + str(epoch) + '.npz'
+    with np.load(param_path) as f:
+        param_values = [f['arr_%d' % i] for i in range(len(f.files))]
+        ll.set_all_param_values(model, param_values)     
+    return model

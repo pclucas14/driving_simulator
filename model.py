@@ -17,9 +17,9 @@ def generator(z_dim=100, num_units=128, input_var=None, batch_size=64):
 
     generator.append(ll.InputLayer(shape=(batch_size, z_dim), input_var=noise))
 
-    generator.append(ll.DenseLayer(generator[-1], num_units*5*10))
+    generator.append(ll.DenseLayer(generator[-1], num_units*8*5*10))
 
-    generator.append(ll.ReshapeLayer(generator[-1], shape=(-1, num_units, 5, 10)))
+    generator.append(ll.ReshapeLayer(generator[-1], shape=(-1, num_units*8, 5, 10)))
 
     generator.append(ll.batch_norm(ll.TransposedConv2DLayer(generator[-1],
                                                             num_filters=num_units*4, 
