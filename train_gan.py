@@ -54,7 +54,7 @@ train_critic = theano.function(inputs=[images],
 
 train_gen =    theano.function(inputs=[],
                                outputs=[(fake_out > 0.5).mean(), 
-					(fake_out).mean(),
+                                        (fake_out).mean(),
                                         gen_loss,
                                         gen_grads_norm], 
                                updates = gen_updates,
@@ -93,7 +93,5 @@ for epoch in range(3000000):
     saveImage(samples, epoch)
 
     if epoch % 25 == 0 : 
-	save_model(critic, 'disc', epoch)
-	save_model(generator, 'gen', epoch)
-	# np.savez('models/disc_' + str(epoch) + '.npz', *ll.get_all_param_values(critic))
-        # np.savez('models/gen_' + str(epoch) + '.npz', *ll.get_all_param_values(generator))
+        save_model(critic, 'disc', epoch)
+        save_model(generator, 'gen', epoch)

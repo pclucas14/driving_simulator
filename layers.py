@@ -4,6 +4,7 @@ import numpy as np
 import theano
 import theano.tensor as T
 import lasagne as nn
+import lasagne
 import time
 from PIL import Image
 from scipy.stats import norm

@@ -9,6 +9,7 @@ from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 from utils import * 
 from layers import * 
 
+
 def encoder(z_dim=100, input_var=None, num_units=512):
     encoder = []
     lrelu = lasagne.nonlinearities.LeakyRectify(0.2)
@@ -150,6 +151,7 @@ def discriminator(input_var=None, num_units=512):
 
     for layer in discriminator : 
         print layer.output_shape
+    print ""
 
     return discriminator
 

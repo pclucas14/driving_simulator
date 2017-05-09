@@ -1,13 +1,15 @@
 from model import * 
+from collections import OrderedDict
 
-# hyperparameters
+# hyperparameters / parameters
 batch_size = 64
 initial_eta = 1e-4
 load_params = False
+train_networks_together = True
 
+encoder_layers = encoder(num_units=512)
 generator_layers = generator(num_units=128)
 discriminator_layers = discriminator(num_units=512)
-encoder_layers = encoder(num_units=512)
 
 generator = generator_layers[-1]
 critic = discriminator_layers[-1]
@@ -74,6 +76,7 @@ critic_updates = lasagne.updates.adam(
     critic_grads, critic_params, learning_rate=initial_eta)
 enc_updates = lasagne.updates.adam(
     enc_grads, enc_params, learning_rate=initial_eta)
+all_updates = enc_updates; all_updates.update(critic_updates); all_updates.update(gen_updates)
 
      
 # functions 
@@ -102,21 +105,34 @@ train_enc =      theano.function(inputs=[images],
                                  updates = enc_updates,
                                  name='train_encoder') #, on_unused_input='warn')
 
+train_all =      theano.function(inputs=[images],
+                                 outputs=[(fake_enc_out).mean(), 
+                                        (fake_noise_out).mean(),
+                                        (real_out).mean(),
+                                        gen_loss, 
+                                        critic_loss, 
+                                        enc_loss,
+                                        gen_grads_norm,
+                                        critic_grads_norm,
+                                        enc_grads_norm], 
+                                 updates = all_updates,
+                                 name='train_all') #, on_unused_input='warn')
+
 test_gen_noise = theano.function(inputs=[],
                                  outputs=[gen_noise_output], 
                                  name='test_gen')#, on_unused_input='warn')
 
-test_gen_enc =  theano.function(inputs=[images],
-                                outputs=[gen_enc_output], 
-                                name='test_gen')#, on_unused_input='warn')
+test_gen_enc  =  theano.function(inputs=[images],
+                                 outputs=[gen_enc_output], 
+                                 name='test_gen')#, on_unused_input='warn')
 
 '''
 training section 
 '''
 print 'loading dataset'
-dataset = load_dataset(sample=False)
+dataset = load_dataset_dummy()#(sample=False)
 num_batches = dataset.shape[0] / batch_size - 2
-batches = iterate_minibatches(dataset[:num_batches * batch_size], batch_size, shuffle=True, forever=True)
+batches = iterate_minibatches(dataset[:num_batches * batch_size], batch_size, forever=True)
 test_batch = dataset[num_batches * batch_size : (num_batches + 1) * batch_size]
 test_batch_copy = (test_batch * 0.5 + 0.5) * 255. 
 
@@ -125,12 +141,16 @@ for epoch in range(3000000):
     gen_err = 0
     disc_err = 0
     enc_err = 0
+    err = 0
 
-    for _ in range(50):
+    for _ in range(1):
         target = next(batches)
-        gen_err += np.array(train_gen(target))
-        disc_err += np.array(train_critic(target))
-        enc_err += np.array(train_enc(target))
+        if train_networks_together:
+            err += np.array(train_all(target))
+        else : 
+            gen_err += np.array(train_gen(target))
+            disc_err += np.array(train_critic(target))
+            enc_err += np.array(train_enc(target))
 
     # test out
     samples = test_gen_enc(test_batch)[0]
@@ -139,9 +159,12 @@ for epoch in range(3000000):
     saveImage(test_batch_copy, 0, name='og_')
 
     print epoch
-    print("gen  loss:\t\t{}".format(gen_err / 50. ))
-    print("disc loss:\t\t{}".format(disc_err / 50. ))
-    print("enc  loss:\t\t{}".format(enc_err / 50. ))
+    if train_networks_together : 
+        print("all  loss:\t\t{}".format(err / 50. ))
+    else : 
+        print("gen  loss:\t\t{}".format(gen_err / 50. ))
+        print("disc loss:\t\t{}".format(disc_err / 50. ))
+        print("enc  loss:\t\t{}".format(enc_err / 50. ))
 
     if epoch % 25 == 0 : 
         save_model(critic, 'disc', epoch)
