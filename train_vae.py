@@ -130,7 +130,7 @@ test_gen_enc  =  theano.function(inputs=[images],
 training section 
 '''
 print 'loading dataset'
-dataset = load_dataset_dummy()#(sample=False)
+dataset = load_dataset(sample=False)
 num_batches = dataset.shape[0] / batch_size - 2
 batches = iterate_minibatches(dataset[:num_batches * batch_size], batch_size, forever=True)
 test_batch = dataset[num_batches * batch_size : (num_batches + 1) * batch_size]
@@ -138,12 +138,9 @@ test_batch_copy = (test_batch * 0.5 + 0.5) * 255.
 
 print 'staring training'
 for epoch in range(3000000):
-    gen_err = 0
-    disc_err = 0
-    enc_err = 0
-    err = 0
+    gen_err, gen_err, enc_err, err = 0, 0, 0, 0
 
-    for _ in range(1):
+    for _ in range(50):
         target = next(batches)
         if train_networks_together:
             err += np.array(train_all(target))
