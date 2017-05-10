@@ -3,53 +3,83 @@ import h5py
 import scipy.misc
 from PIL import Image
 from model import * 
+from os import listdir
+from os.path import isfile, join
+
+path = '/home/ml/lpagec/research/dataset/'
 
 def load_dataset(normalize=True, resize=True, sample=False):
-    path = '/home/ml/lpagec/research/dataset/camera/'
+    path = '/home/ml/lpagec/research/dataset/'
 
     # check if processed file in memory : 
     try : 
-        f = file(path + 'data.bin', "rb")
+        f = file(path + 'camera/other/data.bin', "rb")
         print "found cached dataset"
         dataset = np.load(f)
         f.close()
         return dataset
     except : 
-        print "no cached version. processing raw images."
-        camera_file = h5py.File(path + '2016-02-02--10-16-58.h5')
-        camera_file = camera_file['X']
-        camera_file = np.array(camera_file)
-        if sample : camera_file = cmaera_file[:1000]
-        if resize : 
-            # scipy takes tf ordering, so make sure array respects ordering
-            if camera_file.shape[-1] != 3 :
-                camera_file = camera_file.transpose(0, 2, 3, 1)
+        print "no cached version. processing raw data."
 
-            dataset = np.zeros((camera_file.shape[0], 80, 160, 3))
-            for i in range(camera_file.shape[0]):
-                img = scipy.misc.imresize( camera_file[i], (80, 160, 3))
-                dataset[i] = img
-            
-        else : 
-            dataset = camera_file
-        
-        # remove random images at the beginning
-        if not sample : 
-            dataset = dataset[900:]
-            dataset = dataset[:-1500]
+	# processing frames
+        files_in_cam_dir = [f for f in listdir(path + 'camera/') if isfile(join(path + 'camera/', f))]
+        camera_files = [f for f in files_in_cam_dir if '.h5' in f]
+
+        # storing all frames in this dictionnary, key = filename 
+        all_frames = dict()
+        for camera_path in camera_files : 
+            camera_file = h5py.File(path + 'camera/' + camera_path)
+            camera_file = camera_file['X']
+            camera_file = np.array(camera_file)
+
+            if sample : 
+                camera_file = camerafile[:1000]
+
+            if resize :
+                # scipy takes tf ordering, so make sure array respects ordering
+                if camera_file.shape[-1] != 3 :
+                    camera_file = camera_file.transpose(0, 2, 3, 1)
+
+                dataset = np.zeros((camera_file.shape[0], 80, 160, 3))
+                for i in range(camera_file.shape[0]):
+                    img = scipy.misc.imresize( camera_file[i], (80, 160, 3))
+                    dataset[i] = img
+                
+            else : 
+                dataset = camera_file
+            '''
+            # remove random images at the beginning (first Dataset specific!)
+                dataset = dataset[900:]
+                dataset = dataset[:-1500]
+            '''
             np.random.shuffle(dataset)
-        dataset = dataset.astype('float32')
-        dataset /= 255.
-        
-        # put dataset in Theano ordering
-        if dataset.shape[1] != 3 : 
-            dataset = dataset.transpose(0, 3, 1, 2)
+            dataset = dataset.astype('float32')
+            dataset /= 255.
+            
+            # put dataset in Theano ordering
+            if dataset.shape[1] != 3 : 
+                dataset = dataset.transpose(0, 3, 1, 2)
 
-        if normalize : 
-            dataset -= 0.5
-            dataset /= 0.5
+            if normalize : 
+                dataset -= 0.5
+                dataset /= 0.5
+
+            # save to global dictionnary
+            all_frames[camera_path] = dataset
+       
+        # processing logs
+        files_in_log_dir = [f for f in listdir(path + 'log/') if isfile(join(path + 'log/', f))]
+        log_files = [f for f in onlyfiles if '.h5' in f]
         
-        # save processed dataset.
+        # storing all log info in this dictionnary, key = filename
+        all_logs = dict()
+        for log_path in log_files : 
+            log_file = h5py.File(path + 'log/' + log_path)
+	    all_logs[log_path] = log_file
+
+	# TODO: complete code
+        
+	# save processed dataset.
         f = file(path + 'data.bin', "wb")
         np.save(f,dataset)
     
@@ -102,3 +132,153 @@ def load_model(model, model_name, epoch):
         param_values = [f['arr_%d' % i] for i in range(len(f.files))]
         ll.set_all_param_values(model, param_values)     
     return model
+
+'''
+taken from the original repository 
+https://github.com/commaai/research/blob/master/dask_generator.py
+'''
+
+def concatenate(camera_names, time_len):
+    logs_names = [x.replace('camera', 'log') for x in camera_names]
+
+    angle = [] # steering angle of the car
+    speed = [] # steering angle of the car
+    hdf5_camera = [] # the camera hdf5 files need to continue open
+    c5x = []
+    filters = []
+    lastidx = 0
+
+    for cword, tword in zip(camera_names, logs_names):
+        try:
+            with h5py.File(tword, "r") as t5:
+                c5 = h5py.File(cword, "r")
+                hdf5_camera.append(c5)
+                x = c5["X"]
+                c5x.append((lastidx, lastidx+x.shape[0], x))
+
+                speed_value = t5["speed"][:]
+                steering_angle = t5["steering_angle"][:]
+                idxs = np.linspace(0, steering_angle.shape[0]-1, x.shape[0]).astype("int") # approximate alignment
+                angle.append(steering_angle[idxs])
+                speed.append(speed_value[idxs])
+
+                goods = np.abs(angle[-1]) <= 200
+
+                filters.append(np.argwhere(goods)[time_len-1:] + (lastidx+time_len-1))
+                lastidx += goods.shape[0]
+                # check for mismatched length bug
+                print("x {} | t {} | f {}".format(x.shape[0], steering_angle.shape[0], goods.shape[0]))
+                if x.shape[0] != angle[-1].shape[0] or x.shape[0] != goods.shape[0]:
+                    raise Exception("bad shape")
+
+        except IOError:
+            import traceback
+            traceback.print_exc()
+            print "failed to open", tword
+
+    angle = np.concatenate(angle, axis=0)
+    speed = np.concatenate(speed, axis=0)
+    filters = np.concatenate(filters, axis=0).ravel()
+    print "training on %d/%d examples" % (filters.shape[0], angle.shape[0])
+    return c5x, angle, speed, filters, hdf5_camera
+
+
+first = True
+
+
+def datagen(time_len=1, batch_size=64*500, ignore_goods=False):
+    """
+    Parameters:
+    -----------
+    leads : bool, should we use all x, y and speed radar leads? default is false, uses only x
+    """
+    global first
+    global path
+    assert time_len > 0
+
+    files_in_cam_dir = [f for f in listdir(path + 'camera/') if isfile(join(path + 'camera/', f))]
+    filter_files = [f for f in files_in_cam_dir if '.h5' in f]
+    filter_files = [path + 'camera/' + x for x in filter_files]
+    filter_names = sorted(filter_files)
+
+    c5x, angle, speed, filters, hdf5_camera = concatenate(filter_names, time_len=time_len )
+    filters_set = set(filters)
+ 
+
+    X_batch = np.zeros((batch_size, time_len, 3, 160, 320), dtype='uint8')
+    angle_batch = np.zeros((batch_size, time_len, 1), dtype='float32')
+    speed_batch = np.zeros((batch_size, time_len, 1), dtype='float32')
+
+    while True:
+        try:
+            t = time.time()
+
+            count = 0
+            start = time.time()
+            while count < batch_size:
+                if not ignore_goods:
+                    i = np.random.choice(filters)
+                    # check the time history for goods
+                    good = True
+                    for j in (i-time_len+1, i+1):
+                        if j not in filters_set:
+                            good = False
+                    if not good:
+                        continue
+
+                else:
+                    i = np.random.randint(time_len+1, len(angle), 1)
+
+                # GET X_BATCH
+                # low quality loop
+                for es, ee, x in c5x:
+                    if i >= es and i < ee:
+                        X_batch[count] = x[i-es-time_len+1:i-es+1]
+                        break
+
+                angle_batch[count] = np.copy(angle[i-time_len+1:i+1])[:, None]
+                speed_batch[count] = np.copy(speed[i-time_len+1:i+1])[:, None]
+
+                count += 1
+
+            # sanity check
+            assert X_batch.shape == (batch_size, time_len, 3, 160, 320)
+
+            print("%5.2f ms" % ((time.time()-start)*1000.0))
+
+            if first:
+                print "X", X_batch.shape
+                print "angle", angle_batch.shape
+                print "speed", speed_batch.shape
+                first = False
+
+            yield (X_batch, angle_batch, speed_batch)
+
+        except KeyboardInterrupt:
+            raise
+        except:
+            traceback.print_exc()
+pass
+
+
+def cleanup_data(data, normalize=False):
+    time = 1
+    out_leng = 0
+    X = data[0]
+    angle, speed = data[1], data[2]
+    sh = X.shape
+    X = X.reshape((-1, 3, 160, 320))
+    X = np.asarray([scipy.misc.imresize(x.transpose(1, 2, 0), (80, 160, 3)) for x in X]) 
+    if normalize : X = X/127.5 - 1.
+    X = X.reshape(sh[0], 80, 160, 3)
+    Z = np.concatenate([angle, speed], axis=-1)
+    return Z, X
+
+def data_iterator(batch_size):
+    generator = datagen(batch_size=batch_size)
+    for tup in generator:
+        data = cleanup_data(tup)
+    	yield data
+
+
+
