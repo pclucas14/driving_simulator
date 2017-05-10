@@ -1,4 +1,5 @@
 from model import * 
+from DataHandler import * 
 
 # hyperparameters
 batch_size = 64
@@ -9,6 +10,7 @@ generator_layers = generator(num_units=128)
 discriminator_layers = discriminator()
 generator = generator_layers[-1]
 critic = discriminator_layers[-1]
+dh = DataHandler()
 
 if load_params : 
     load_model(generator, 'gen', 1900)
@@ -17,6 +19,7 @@ if load_params :
 
 # placeholders 
 images = T.tensor4('images from dataset')
+index = T.lscalar() # index to a [mini]batch
 eta = theano.shared(lasagne.utils.floatX(initial_eta))
 a, b, c = 0, 1, 1
 print 'initializing functions'
@@ -52,6 +55,15 @@ train_critic = theano.function(inputs=[images],
                                updates=critic_updates,
                                name='train_critic') #, on_unused_input='warn')
 
+train_critic = theano.function(inputs=[index], 
+                               outputs=[(real_out).mean(),
+                                        (fake_out).mean(),
+                                        critic_loss,
+                                        critic_grads_norm], 
+                               updates=critic_updates,
+                               givens={images: dh.GPU_image[index * batch_size: (index + 1) * batch_size]}
+                               name='train_critic') #, on_unused_input='warn')
+
 train_gen =    theano.function(inputs=[],
                                outputs=[(fake_out > 0.5).mean(), 
                                         (fake_out).mean(),
@@ -70,8 +82,8 @@ training section
 print 'loading dataset'
 dataset = load_dataset(sample=False)
 # import pdb; pdb.set_trace()
-num_batches = dataset.shape[0] / batch_size - 2
-batches = iterate_minibatches(dataset[:num_batches * batch_size], batch_size, shuffle=True, forever=True)
+# num_batches = dataset.shape[0] / batch_size - 2
+# batches = iterate_minibatches(dataset[:num_batches * batch_size], batch_size, shuffle=True, forever=True)
 
 print 'staring training'
 for epoch in range(3000000):
@@ -79,10 +91,13 @@ for epoch in range(3000000):
     disc_err = 0
 
     for _ in range(50):
-        target = next(batches)
+        # target = next(batches)
+        batch_no = dh.get_next_batch_no()
         for _ in range (1) : 
-	    gen_err += np.array(train_gen())
-        disc_err += np.array(train_critic(target))
+            gen_err += np.array(train_gen())
+        # disc_err += np.array(train_critic(target))
+        disc_err += np.array(train_critic(batch_no))
+
 
     # test out
     samples = test_gen()[0]
