@@ -1,29 +1,36 @@
 from model import * 
 from DataHandler import * 
+from Logger import * 
+from collections import OrderedDict 
 
-# hyperparameters
-batch_size = 64
-initial_eta = 1e-4
-load_params = True
+# hyperparameters / parameters
+params = OrderedDict()
+params['batch_size'] = 64
+params['initial_eta'] = 3e-4
+params['load_weights'] = False
+params['optimizer'] = 'rmsprop'
+params['num_gen_units'] = 128 # num channels for second last layer output. 
+params['z_dim'] = 512
+params['disc_iter'] = 1
+params['gen_iter'] = 1
+params['image_prepro'] = 'DCGAN' # ( /250.; -0.5; /0.5) taken from DCGAN repo.
 
-generator_layers = generator(num_units=128)
+generator_layers = generator(num_units=params['num_gen_units'], z_dim=params['z_dim'])
 discriminator_layers = discriminator()
 generator = generator_layers[-1]
 critic = discriminator_layers[-1]
-dh = DataHandler()
 
-if load_params : 
-    load_model(generator, 'gen', 1900)
-    load_model(critic, 'disc', 1900)
-    print 'params loaded'
+
+dh = DataHandler()
+eh = ExpHandler(params)
 
 # placeholders 
 images = T.tensor4('images from dataset')
 index = T.lscalar() # index to a [mini]batch
-eta = theano.shared(lasagne.utils.floatX(initial_eta))
+eta = theano.shared(lasagne.utils.floatX(params['initial_eta']))
 a, b, c = 0, 1, 1
-print 'initializing functions'
 
+print 'initializing functions'
 gen_output = ll.get_output(generator)
 gen_params = ll.get_all_params(generator, trainable=True)
 critic_params = ll.get_all_params(critic, trainable=True)
@@ -41,72 +48,66 @@ gen_grads_norm = sum(T.sum(T.square(grad)) for grad in gen_grads) / len(gen_grad
 critic_grads_norm = sum(T.sum(T.square(grad)) for grad in critic_grads) / len(critic_grads)
 
 # updates
-gen_updates= lasagne.updates.adam(
-    gen_grads, gen_params, learning_rate=initial_eta)
-critic_updates = lasagne.updates.adam(
-    critic_grads, critic_params, learning_rate=initial_eta)
+gen_updates= optimizer_factory(
+    params['optimizer'], gen_grads, gen_params, params['initial_eta'])
+critic_updates = optimizer_factory(
+    params['optimizer'], critic_grads, critic_params, params['initial_eta'])
 
-# functions 
-train_critic = theano.function(inputs=[images], 
-                               outputs=[(real_out).mean(),
-                                        (fake_out).mean(),
-                                        critic_loss,
-                                        critic_grads_norm], 
-                               updates=critic_updates,
-                               name='train_critic') #, on_unused_input='warn')
+# function outputs
+critic_fn_output = OrderedDict()
+critic_fn_output['real_out_mean'] = (real_out).mean()
+critic_fn_output['fake_out_mean'] = (fake_out).mean()
+critic_fn_output['loss'] = critic_loss
+critic_fn_output['grads_norm'] = critic_grads_norm
 
+gen_fn_output = OrderedDict()
+gen_fn_output['fake_out_mean'] = (fake_out).mean()
+gen_fn_output['loss'] = gen_loss
+gen_fn_output['grads_norm'] = gen_grads_norm
+
+eh.add_model('gen', generator_layers,  gen_fn_output)
+eh.add_model('disc', discriminator_layers, critic_fn_output)
+
+# functions
 train_critic = theano.function(inputs=[index], 
-                               outputs=[(real_out).mean(),
-                                        (fake_out).mean(),
-                                        critic_loss,
-                                        critic_grads_norm], 
+                               outputs=critic_fn_output.values(), 
                                updates=critic_updates,
-                               givens={images: dh.GPU_image[index * batch_size: (index + 1) * batch_size]}
-                               name='train_critic') #, on_unused_input='warn')
-
+                               givens={images: dh.GPU_image[index * params['batch_size']: 
+                                                         (index+1) * params['batch_size']]},
+                               name='train_critic')
 train_gen =    theano.function(inputs=[],
-                               outputs=[(fake_out > 0.5).mean(), 
-                                        (fake_out).mean(),
-                                        gen_loss,
-                                        gen_grads_norm], 
+                               outputs=gen_fn_output.values(),
                                updates = gen_updates,
-                               name='train_gen') #, on_unused_input='warn')
+                               name='train_gen') 
 
 test_gen =     theano.function(inputs=[],
                                outputs=[gen_output], 
-                               name='test_gen')#, on_unused_input='warn')
+                               name='test_gen')
 
 '''
 training section 
 '''
-print 'loading dataset'
-dataset = load_dataset(sample=False)
-# import pdb; pdb.set_trace()
-# num_batches = dataset.shape[0] / batch_size - 2
-# batches = iterate_minibatches(dataset[:num_batches * batch_size], batch_size, shuffle=True, forever=True)
-
 print 'staring training'
 for epoch in range(3000000):
     gen_err = 0
     disc_err = 0
 
     for _ in range(50):
-        # target = next(batches)
         batch_no = dh.get_next_batch_no()
-        for _ in range (1) : 
-            gen_err += np.array(train_gen())
-        # disc_err += np.array(train_critic(target))
-        disc_err += np.array(train_critic(batch_no))
+        for _ in range (params['gen_iter']) : 
+            gen_out = np.array(train_gen())
+            gen_err += gen_out
+            eh.record('gen', gen_out)
+        for _ in range (params['disc_iter']) :
+            disc_out = np.array(train_critic(batch_no))
+            disc_err += disc_out
+            eh.record('disc', disc_out)
 
+    # test out model
+    eh.save_image(test_gen()[0])
+    eh.end_of_epoch()
 
-    # test out
-    samples = test_gen()[0]
-    samples *= 0.5; samples += 0.5; samples *= 255.
     print epoch
     print("gen  loss:\t\t{}".format(gen_err / 50. ))
     print("disc loss:\t\t{}".format(disc_err / 50. ))
-    saveImage(samples, epoch)
-
-    if epoch % 25 == 0 : 
-        save_model(critic, 'disc', epoch)
-        save_model(generator, 'gen', epoch)
+ 

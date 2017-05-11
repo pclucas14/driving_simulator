@@ -5,9 +5,14 @@ from PIL import Image
 from model import * 
 from os import listdir
 from os.path import isfile, join
+import time
+import lasagne
 
 path = '/home/ml/lpagec/research/dataset/'
 
+'''
+method depreciated ?. Should not longer be used (replaced by DataHandler)
+'''
 def load_dataset(normalize=True, resize=True, sample=False):
     path = '/home/ml/lpagec/research/dataset/'
 
@@ -104,7 +109,7 @@ def iterate_minibatches(inputs,  batchsize, full=None, shuffle=False,
         if not forever: 
             break
 
-def saveImage(imageData, epoch, name="", side=8):
+def saveImage(imageData, path, side=8):
 
     # format data appropriately
     imageData = imageData.transpose(0,2,3,1).astype('uint8')
@@ -121,7 +126,7 @@ def saveImage(imageData, epoch, name="", side=8):
             new_im.paste(img, (i,j))
             index += 1
 
-    new_im.save('/home/ml/lpagec/driving_simulator/images/' + name + 'sample_epoch' + str(epoch) + '.png')
+    new_im.save(path + '.png')
 
 def save_model(model, model_name, epoch):
     np.savez('models/' + str(model_name) + '_' + str(epoch) + '.npz', *ll.get_all_param_values(model))
@@ -256,12 +261,13 @@ def datagen(time_len=1, batch_size=64*500, ignore_goods=False):
 
         except KeyboardInterrupt:
             raise
-        except:
-            traceback.print_exc()
+        except Exception as e:
+            #traceback.print_exc()
+	    print e
 pass
 
 
-def cleanup_data(data, normalize=False):
+def cleanup_data(data, normalize=True):
     time = 1
     out_leng = 0
     X = data[0]
@@ -269,7 +275,8 @@ def cleanup_data(data, normalize=False):
     sh = X.shape
     X = X.reshape((-1, 3, 160, 320))
     X = np.asarray([scipy.misc.imresize(x.transpose(1, 2, 0), (80, 160, 3)) for x in X]) 
-    if normalize : X = X/127.5 - 1.
+    if normalize : #X = X/127.5 - 1.
+	X = (X / 255. - 0.5) / 0.5
     X = X.reshape(sh[0], 80, 160, 3)
     Z = np.concatenate([angle, speed], axis=-1)
     return Z, X
@@ -279,6 +286,16 @@ def data_iterator(batch_size):
     for tup in generator:
         data = cleanup_data(tup)
     	yield data
+
+def optimizer_factory(optimizer, grads, params, eta):
+    if optimizer == 'rmsprop' : 
+        return lasagne.updates.rmsprop(
+            grads, params, learning_rate=eta)
+    elif optimizer == 'adam' : 
+        return lasagne.updates.adam(
+            grads, params, learning_rate=eta)
+    else : 
+        raise Exception(optimizer + ' not supported')
 
 
 
