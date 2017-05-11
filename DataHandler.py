@@ -38,7 +38,7 @@ def preprocess_next_batch(dataHandler):
 # responsible for efficiently delivering minibatches 
 class DataHandler():
     # TODO : change default num_batches value
-    def __init__(self, batch_size=64, num_batches=51, num_extra_features=2):
+    def __init__(self, batch_size=64, num_batches=2, num_extra_features=2):
         self.GPU_image = theano.shared(np.zeros((num_batches * batch_size, 3, 80, 160)).astype('float32'))
         self.GPU_other = theano.shared(np.zeros((num_batches * batch_size, num_extra_features)).astype('float32'))
     

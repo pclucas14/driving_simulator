@@ -7,7 +7,7 @@ from collections import OrderedDict
 params = OrderedDict()
 params['batch_size'] = 64
 params['initial_eta'] = 3e-4
-params['load_weights'] = False
+params['load_weights'] = (0,1300) # version/epoch tupple pair None
 params['optimizer'] = 'rmsprop'
 params['num_gen_units'] = 128 # num channels for second last layer output. 
 params['z_dim'] = 512
@@ -19,7 +19,6 @@ generator_layers = generator(num_units=params['num_gen_units'], z_dim=params['z_
 discriminator_layers = discriminator()
 generator = generator_layers[-1]
 critic = discriminator_layers[-1]
-
 
 dh = DataHandler()
 eh = ExpHandler(params)
@@ -92,7 +91,7 @@ for epoch in range(3000000):
     gen_err = 0
     disc_err = 0
 
-    for _ in range(50):
+    for _ in range(1):
         batch_no = dh.get_next_batch_no()
         for _ in range (params['gen_iter']) : 
             gen_out = np.array(train_gen())

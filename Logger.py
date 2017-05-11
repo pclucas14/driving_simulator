@@ -43,6 +43,10 @@ class ExpHandler():
         aModel = Model(name, layers, monitored_values, self.exp_name)
         self.monitored_models[aModel.name] = aModel
 
+        if self.params['load_weights'] is not None : 
+            exp_no, epoch = self.params['load_weights']
+            aModel.load_params(exp_no, epoch)
+
     def record(self, model_name, values):
         self.monitored_models[model_name].values.append(values)
 
@@ -87,16 +91,16 @@ class Model():
                 fp.write(str(layer.output_shape) + '\n')
 
 
-
     def save_params(self, epoch):
         np.savez(self.path +  '/weights/' + str(epoch) + '.npz', *ll.get_all_param_values(self.network[-1]))
 
 
     def load_params(self, exp_no, epoch):
-        param_path = 'experiments/exp_/' + str(exp_no) + '/' + self.name + '/weights/' + str(epoch) + '.npz'
+        param_path = 'experiments/exp_' + str(exp_no) + '/' + self.name + '/weights/' + str(epoch) + '.npz'
         with np.load(param_path) as f:
             param_values = [f['arr_%d' % i] for i in range(len(f.files))]
             ll.set_all_param_values(self.network[-1], param_values)   
+        print 'loaded weights for model ' + self.name 
 
 
     def dump_values(self):
