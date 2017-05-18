@@ -109,6 +109,16 @@ def iterate_minibatches(inputs,  batchsize, full=None, shuffle=False,
         if not forever: 
             break
 
+def extract_video_frames(input):
+    # input should have shape
+    # (b_s, seq_length, 3, 60, 120)
+    sh = input.shape
+    output = np.zeros((sh[0] * sh[1], sh[2], sh[3], sh[4]))
+    for i in range(sh[0]):
+        for j in range(sh[1]):
+            output[i * sh[1] + j,:,:,:] = input[i,j,:,:,:]
+    return output
+
 def saveImage(imageData, path, side=8):
 
     # format data appropriately
@@ -208,7 +218,6 @@ def datagen(time_len=1, batch_size=64*500, ignore_goods=False):
 
     c5x, angle, speed, filters, hdf5_camera = concatenate(filter_names, time_len=time_len )
     filters_set = set(filters)
- 
 
     X_batch = np.zeros((batch_size, time_len, 3, 160, 320), dtype='uint8')
     angle_batch = np.zeros((batch_size, time_len, 1), dtype='float32')
@@ -267,24 +276,35 @@ def datagen(time_len=1, batch_size=64*500, ignore_goods=False):
 pass
 
 
-def cleanup_data(data, normalize=True):
-    time = 1
-    out_leng = 0
+def cleanup_data(data, skip_frames, time_len, normalize=True):
     X = data[0]
     angle, speed = data[1], data[2]
+
+    # remove extra frames
+    X = X[:, ::skip_frames]
     sh = X.shape
-    X = X.reshape((-1, 3, 160, 320))
-    X = np.asarray([scipy.misc.imresize(x.transpose(1, 2, 0), (80, 160, 3)) for x in X]) 
-    if normalize : #X = X/127.5 - 1.
-	X = (X / 255. - 0.5) / 0.5
-    X = X.reshape(sh[0], 80, 160, 3)
+
+    if time_len == 1 : 
+        X = X.reshape((-1, 3, 160, 320))
+        X = np.asarray([scipy.misc.imresize(x.transpose(1, 2, 0), (80, 160, 3)) for x in X])
+        X = X.reshape(sh[0], 80, 160, 3) 
+        X = X.transpose(0,3,1,2)
+    else : 
+        # we need to accomodate this extra dimension
+        placeholder = np.zeros((sh[0], sh[1], sh[2], 80, 160))
+        for i in range(sh[0]):
+            for j in range(sh[1]):
+                placeholder[i,j,:,:,:] = scipy.misc.imresize(X[i,j].transpose(1, 2, 0), (80, 160, 3)).transpose(2, 0, 1)
+        X = placeholder
+
+    X = (X / 255. - 0.5) / 0.5
     Z = np.concatenate([angle, speed], axis=-1)
     return Z, X
 
-def data_iterator(batch_size):
-    generator = datagen(batch_size=batch_size)
+def data_iterator(batch_size, skip_frames=1, time_len=1):
+    generator = datagen(batch_size=batch_size, time_len=time_len)
     for tup in generator:
-        data = cleanup_data(tup)
+        data = cleanup_data(tup, skip_frames, time_len=time_len)
     	yield data
 
 def optimizer_factory(optimizer, grads, params, eta):
