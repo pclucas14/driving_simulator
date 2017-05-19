@@ -30,7 +30,7 @@ class GaussianSampleLayer(nn.layers.MergeLayer):
                 self.input_shapes[0][1] or inputs[0].shape[1])
         if deterministic:
             return mu
-        return mu + T.exp(logsigma) * self.rng.normal(shape)
+        return mu + T.exp(0.5 * logsigma) * self.rng.normal(shape)
 
 
 '''

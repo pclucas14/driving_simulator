@@ -12,15 +12,15 @@ params['load_weights'] = (12, 1000)#None# version/epoch tupple pair
 params['optimizer'] = 'rmsprop'
 params['num_gen_units'] = 128 # num channels for second last layer output. 
 params['z_dim'] = 512
-params['disc_iter'] = 0
-params['gen_iter'] = 0
-params['enc_iter'] = 0
+params['disc_iter'] = 1
+params['gen_iter'] = 1
+params['enc_iter'] = 1
 params['image_prepro'] = 'DCGAN' # (/250.; -0.5; /0.5) taken from DCGAN repo.
-params['loss_comments'] = 'mixture of context encoder and VAE feature matching'
+params['loss_comments'] = 'original setup, but with reversed KL'
 params['lambda_adv'] = 1
 params['lambda_recon'] = 0
-params['lambda_hidden'] = 1
-params['epoch_iter'] = 0
+params['lambda_hidden'] = 1e-6
+params['epoch_iter'] = 50
 params['test'] = True
 
 generator_layers = generator(num_units=params['num_gen_units'], z_dim=params['z_dim'])
@@ -67,10 +67,9 @@ hidden_loss = lasagne.objectives.squared_error(hid_fake, hid_real).mean()
 recon_loss = lasagne.objectives.squared_error(gen_enc_output, images).mean()
 
 enc_mu, enc_logsigma, l_z = ll.get_output(encoder_layers[-3:], inputs=images)
-kl_div = -0.5 * T.sum(1 + 2*enc_logsigma - T.sqr(enc_mu) - T.exp(2 * enc_logsigma))
-
+kl_div = 0.5 * T.sum(1 + enc_logsigma - enc_mu**2 - T.exp(log_sigma), axis=1)
 gen_loss = params['lambda_recon'] * recon_loss + params['lambda_adv'] * adv_loss + params['lambda_hidden'] * hidden_loss
-enc_loss = params['lambda_hidden'] * hidden_loss + 0.1 * kl_div
+enc_loss = hidden_loss + kl_div.mean()
 
 gen_grads = theano.grad(gen_loss, wrt=gen_params)
 critic_grads = theano.grad(critic_loss, wrt=critic_params)

@@ -5,7 +5,7 @@ from collections import OrderedDict
 
 # hyperparameters / parameters
 params = OrderedDict()
-params['batch_size'] = 64
+params['batch_size'] = 4
 params['initial_eta'] = 2e-4
 params['load_weights'] = (67, 2150) # version/epoch tupple pair None
 params['optimizer'] = 'rmsprop'
@@ -14,16 +14,18 @@ params['z_dim'] = 512
 params['disc_iter'] = 1
 params['gen_iter'] = 1
 params['epoch_iter'] = 0
-params['seq_length'] = 16
-params['skip_frames'] = 4
-params['comments'] = 'adding noise at every input'
+params['seq_length'] = 64
+params['skip_frames'] = 1
+params['comments'] = 'testing longer sequences with RGAN'
 params['image_prepro'] = 'DCGAN' # ( /250.; -0.5; /0.5) taken from DCGAN repo.
 
 generator_layers = generator(num_units=params['num_gen_units'], z_dim=params['z_dim'])
 discriminator_layers = discriminator_3D(seq_length=(params['seq_length']/params['skip_frames']))
+encoder_layers = encoder()
 recurrent_layers = recurrent()
 generator = generator_layers[-1]
 critic = discriminator_layers[-1]
+encoder = encoder_layers[-1]
 recurrent = recurrent_layers[-1]
 
 dh = DataHandler(time_len=params['seq_length'], 
@@ -37,6 +39,7 @@ index = T.lscalar() # index to a [mini]batch
 eta = theano.shared(lasagne.utils.floatX(params['initial_eta']))
 a, b, c = 0, 1, 1
 
+enc_output = ll.get_output(encoder, inputs=images)
 # we need to fetch input at each timestep for t=0,...,'seq_length'
 rec_outputs = []
 gen_outputs = []

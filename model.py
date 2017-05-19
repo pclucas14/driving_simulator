@@ -10,7 +10,7 @@ from utils import *
 from layers import * 
 
 
-def encoder(z_dim=100, input_var=None, num_units=512):
+def encoder(z_dim=100, input_var=None, num_units=512, vae=True):
     encoder = []
     lrelu = lasagne.nonlinearities.LeakyRectify(0.2)
 
@@ -46,13 +46,15 @@ def encoder(z_dim=100, input_var=None, num_units=512):
 
     encoder.append(ll.FlattenLayer(encoder[-1]))
 
-    enc_mu = ll.DenseLayer(encoder[-1], num_units=z_dim, nonlinearity=None)
+    if vae : 
+        enc_mu = ll.DenseLayer(encoder[-1], num_units=z_dim, nonlinearity=None)
 
-    enc_logsigma = ll.DenseLayer(encoder[-1], num_units=z_dim, nonlinearity=None)
+        enc_logsigma = ll.DenseLayer(encoder[-1], num_units=z_dim, nonlinearity=None)
 
-    l_z = GaussianSampleLayer(enc_mu, enc_logsigma, name='Z layer')
+        l_z = GaussianSampleLayer(enc_mu, enc_logsigma, name='Z layer')
 
-    encoder += [enc_mu, enc_logsigma, l_z]
+        encoder += [enc_mu, enc_logsigma, l_z]
+        
 
     for layer in encoder : 
         print layer.output_shape
