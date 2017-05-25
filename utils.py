@@ -8,106 +8,12 @@ from os.path import isfile, join
 import time
 import lasagne
 
-path = '/home/ml/lpagec/research/dataset/'
+path = '/NOBACKUP/dash_cam_dataset/'
 
-'''
-method depreciated ?. Should not longer be used (replaced by DataHandler)
-'''
-def load_dataset(normalize=True, resize=True, sample=False):
-    path = '/home/ml/lpagec/research/dataset/'
 
-    # check if processed file in memory : 
-    try : 
-        f = file(path + 'camera/other/data.bin', "rb")
-        print "found cached dataset"
-        dataset = np.load(f)
-        f.close()
-        return dataset
-    except : 
-        print "no cached version. processing raw data."
-
-	# processing frames
-        files_in_cam_dir = [f for f in listdir(path + 'camera/') if isfile(join(path + 'camera/', f))]
-        camera_files = [f for f in files_in_cam_dir if '.h5' in f]
-
-        # storing all frames in this dictionnary, key = filename 
-        all_frames = dict()
-        for camera_path in camera_files : 
-            camera_file = h5py.File(path + 'camera/' + camera_path)
-            camera_file = camera_file['X']
-            camera_file = np.array(camera_file)
-
-            if sample : 
-                camera_file = camerafile[:1000]
-
-            if resize :
-                # scipy takes tf ordering, so make sure array respects ordering
-                if camera_file.shape[-1] != 3 :
-                    camera_file = camera_file.transpose(0, 2, 3, 1)
-
-                dataset = np.zeros((camera_file.shape[0], 80, 160, 3))
-                for i in range(camera_file.shape[0]):
-                    img = scipy.misc.imresize( camera_file[i], (80, 160, 3))
-                    dataset[i] = img
-                
-            else : 
-                dataset = camera_file
-            '''
-            # remove random images at the beginning (first Dataset specific!)
-                dataset = dataset[900:]
-                dataset = dataset[:-1500]
-            '''
-            np.random.shuffle(dataset)
-            dataset = dataset.astype('float32')
-            dataset /= 255.
-            
-            # put dataset in Theano ordering
-            if dataset.shape[1] != 3 : 
-                dataset = dataset.transpose(0, 3, 1, 2)
-
-            if normalize : 
-                dataset -= 0.5
-                dataset /= 0.5
-
-            # save to global dictionnary
-            all_frames[camera_path] = dataset
-       
-        # processing logs
-        files_in_log_dir = [f for f in listdir(path + 'log/') if isfile(join(path + 'log/', f))]
-        log_files = [f for f in onlyfiles if '.h5' in f]
-        
-        # storing all log info in this dictionnary, key = filename
-        all_logs = dict()
-        for log_path in log_files : 
-            log_file = h5py.File(path + 'log/' + log_path)
-	    all_logs[log_path] = log_file
-
-	# TODO: complete code
-        
-	# save processed dataset.
-        f = file(path + 'data.bin', "wb")
-        np.save(f,dataset)
-    
-        return dataset
-        
 def load_dataset_dummy():
     return np.ones((1000, 3, 80, 160))
 
-
-def iterate_minibatches(inputs,  batchsize, full=None, shuffle=False, 
-                        forever=False):   
-    while True : 
-        if shuffle:
-            indices = np.arange(len(inputs))
-            np.random.shuffle(indices)
-        for start_idx in range(0, len(inputs) - batchsize + 1, batchsize):
-            if shuffle:
-                excerpt = indices[start_idx:start_idx + batchsize]
-            else:
-                excerpt = slice(start_idx, start_idx + batchsize)
-            yield inputs[excerpt]#, targets[excerpt]#, full[excerpt]
-        if not forever: 
-            break
 
 def extract_video_frames(input):
     # input should have shape
@@ -138,15 +44,33 @@ def saveImage(imageData, path, side=8):
 
     new_im.save(path + '.png')
 
-def save_model(model, model_name, epoch):
-    np.savez('models/' + str(model_name) + '_' + str(epoch) + '.npz', *ll.get_all_param_values(model))
+def optimizer_factory(optimizer, grads, params, eta):
+    if optimizer == 'rmsprop' : 
+        return lasagne.updates.rmsprop(
+            grads, params, learning_rate=eta)
+    elif optimizer == 'adam' : 
+        return lasagne.updates.adam(
+            grads, params, learning_rate=eta)
+    else : 
+        raise Exception(optimizer + ' not supported')
 
-def load_model(model, model_name, epoch):
-    param_path = 'models/' + str(model_name) + '_' + str(epoch) + '.npz'
-    with np.load(param_path) as f:
-        param_values = [f['arr_%d' % i] for i in range(len(f.files))]
-        ll.set_all_param_values(model, param_values)     
-    return model
+def format_imgs(samples, flatten=False):
+    samples *= 0.5; samples += 0.5; samples *= 255.
+    samples.astype('uint8')
+    if len(samples.shape) == 5:
+        if flatten: 
+            samples = extract_video_frames(samples)
+            samples = samples.transpose(0,2,3,1).astype('uint8')
+        else :
+            samples = samples.transpose(0,1,3,4,2).astype('uint8')
+    else :
+        samples = samples.transpose(0,2,3,1).astype('uint8')
+    return samples
+
+
+
+
+
 
 '''
 taken from the original repository 
@@ -282,6 +206,9 @@ def cleanup_data(data, skip_frames, time_len, normalize=True):
 
     # remove extra frames
     X = X[:, ::skip_frames]
+    angle = angle[::skip_frames]
+    speed = speed[::skip_frames]
+
     sh = X.shape
 
     if time_len == 1 : 
@@ -306,16 +233,6 @@ def data_iterator(batch_size, skip_frames=1, time_len=1):
     for tup in generator:
         data = cleanup_data(tup, skip_frames, time_len=time_len)
     	yield data
-
-def optimizer_factory(optimizer, grads, params, eta):
-    if optimizer == 'rmsprop' : 
-        return lasagne.updates.rmsprop(
-            grads, params, learning_rate=eta)
-    elif optimizer == 'adam' : 
-        return lasagne.updates.adam(
-            grads, params, learning_rate=eta)
-    else : 
-        raise Exception(optimizer + ' not supported')
 
 
 

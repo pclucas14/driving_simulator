@@ -33,15 +33,15 @@ class ExpHandler():
 
         self.monitored_models = dict()
 
-    def save_image(self, samples, real_img=False):
+    def save_image(self, samples, real_img=False, extra=""):
         if self.params['image_prepro'] == 'DCGAN' : 
             samples *= 0.5; samples += 0.5; samples *= 255.
         else : 
             raise Exception('unsupported image preprocessing')
         if real_img : 
-            saveImage(samples, self.exp_name + '/images' + '/samples_real_' + str(self.epoch))
+            saveImage(samples, self.exp_name + '/images' + '/real_' + str(self.epoch))
         else : 
-            saveImage(samples, self.exp_name + '/images' + '/samples_' + str(self.epoch))
+            saveImage(samples, self.exp_name + '/images' + '/' + extra + 'samples_' + str(self.epoch))
 
     def add_model(self, name, layers, monitored_values):
         aModel = Model(name, layers, monitored_values, self.exp_name)

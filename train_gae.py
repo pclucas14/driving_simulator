@@ -6,9 +6,9 @@ from collections import OrderedDict
 # hyperparameters / parameters
 params = OrderedDict()
 params['batch_size'] = 64
-params['initial_eta'] = 2e-4
-params['critic_eta'] = 2e-3
-params['load_weights'] = None#(12, 1000)#None# version/epoch tupple pair
+params['initial_eta'] = 2e-3
+params['critic_eta'] = 2e-4
+params['load_weights'] = (140, 1900)#None# version/epoch tupple pair
 params['optimizer'] = 'rmsprop'
 params['num_gen_units'] = 128 # num channels for second last layer output. 
 params['z_dim'] = 512
@@ -16,21 +16,22 @@ params['disc_iter'] = 1
 params['gen_iter'] = 1
 params['enc_iter'] = 1
 params['image_prepro'] = 'DCGAN' # (/250.; -0.5; /0.5) taken from DCGAN repo.
-params['loss_comments'] = 'original setup + prior samples'
-params['lambda_adv'] = 1
+params['loss_comments'] = 'testing model (140) on sequences'
+params['lambda_adv'] = 0.5
 params['lambda_recon'] = 0
-params['lambda_hidden'] = 1e-1
-params['epoch_iter'] = 25
+params['lambda_hidden'] = 50
+params['epoch_iter'] = 1
 params['test'] = True
 params['mb_disc'] = False
+
 generator_layers = generator(num_units=params['num_gen_units'], z_dim=params['z_dim'])
 discriminator_layers = discriminator(mb_disc=params['mb_disc'])
-encoder_layers = encoder(z_dim=params['z_dim'])
+encoder_layers = encoder(z_dim=params['z_dim'], vae=False)
 generator = generator_layers[-1]
 critic = discriminator_layers[-1]
 encoder = encoder_layers[-1]
 
-dh = DataHandler(time_len=1, skip_frames=1, num_batches=params['epoch_iter']+1)
+dh = DataHandler(time_len=16, skip_frames=2, num_batches=params['epoch_iter']+1)
 eh = ExpHandler(params, test=params['test'])
 
 # placeholders 
@@ -47,9 +48,8 @@ enc_params = ll.get_all_params(encoder, trainable=True)
 # outputs 
 enc_output = ll.get_output(encoder, inputs=images)
 gen_enc_output = ll.get_output(generator, inputs=enc_output)
-enc_output_test = ll.get_output(encoder, inputs=images, deterministic=True) 
-gen_enc_output_test = ll.get_output(generator, inputs=enc_output_test, deterministic=True)
 gen_noise_output = ll.get_output(generator)
+
 
 real_out = ll.get_output(critic, inputs=images)
 fake_out = ll.get_output(critic, inputs=gen_enc_output)
@@ -62,16 +62,15 @@ hid_fake = ll.get_output(discriminator_layers[-3], inputs=gen_enc_output, determ
 # losses 
 critic_loss = (lasagne.objectives.squared_error(real_out, b).mean() +
  	       lasagne.objectives.squared_error(fake_out, a).mean() + 
-	       lasagne.objectives.squared_error(fake_noise_out, a).mean())        
-adv_loss = (lasagne.objectives.squared_error(fake_out, c).mean() +
+               lasagne.objectives.squared_error(fake_noise_out, a).mean())
+ 
+adv_loss = (lasagne.objectives.squared_error(fake_out, c).mean() + 
 	    lasagne.objectives.squared_error(fake_noise_out, c).mean())
 hidden_loss = lasagne.objectives.squared_error(hid_fake, hid_real).mean()
 recon_loss = lasagne.objectives.squared_error(gen_enc_output, images).mean()
 
-enc_mu, enc_logsigma, l_z = ll.get_output(encoder_layers[-3:], inputs=images)
-kl_div = 0.5 * T.sum(1 + enc_logsigma - enc_mu**2 - T.exp(enc_logsigma), axis=1)
 gen_loss = params['lambda_recon'] * recon_loss + params['lambda_adv'] * adv_loss + params['lambda_hidden'] * hidden_loss
-enc_loss = hidden_loss + kl_div.mean()
+enc_loss = gen_loss
 
 gen_grads = theano.grad(gen_loss, wrt=gen_params)
 critic_grads = theano.grad(critic_loss, wrt=critic_params)
@@ -97,7 +96,6 @@ critic_fn_output['grads_norm'] = critic_grads_norm
 
 gen_fn_output = OrderedDict()
 gen_fn_output['fake_out_mean'] = (fake_out).mean()
-gen_fn_output['fake_noise_out_mean'] = (fake_noise_out).mean()
 gen_fn_output['loss'] = gen_loss
 gen_fn_output['adv_loss'] = adv_loss
 gen_fn_output['recon_loss'] = recon_loss
@@ -133,10 +131,10 @@ train_enc =    theano.function(inputs=[index],
                                updates = enc_updates,
                                givens={images: dh.GPU_image[index * params['batch_size']: 
                                                          (index+1) * params['batch_size']]},
-                            name='train_enc')
+                               name='train_enc')
 
 test_gen =     theano.function(inputs=[index],
-                               outputs=[gen_enc_output_test],
+                               outputs=[enc_output, gen_enc_output],
                                givens={images: dh.GPU_image[index * params['batch_size']: 
                                                          (index+1) * params['batch_size']]}, 
                                name='test_gen')
@@ -167,7 +165,9 @@ for epoch in range(3000000):
 
     # test out model
     batch_no = dh.get_next_batch_no()
-    eh.save_image(test_gen(batch_no)[0]); 
+    z, test_imgs = test_gen(batch_no)
+    import pdb; pdb.set_trace()
+    eh.save_image(test_imgs); 
     eh.save_image(dh.GPU_image.get_value()[batch_no * params['batch_size']: 
                                        (batch_no+1) * params['batch_size']], real_img=True)
     eh.end_of_epoch()

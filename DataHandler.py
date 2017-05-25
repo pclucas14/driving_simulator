@@ -23,7 +23,7 @@ def preprocess_next_batch(dataHandler):
     # dataset, it's just a really slow process, hence the thread.
     other_features, images = next(dataHandler.iterator)
     # TODO: remove this
-    images = extract_video_frames(images)
+    # images = extract_video_frames(images)
 
     if other_features.shape != dataHandler.other_shape : 
         other_features = other_features.reshape(dataHandler.other_shape)
@@ -48,7 +48,7 @@ class DataHandler():
     def __init__(self, batch_size=64, num_batches=51, num_extra_features=2, time_len=1, skip_frames=1):
         assert num_batches * batch_size % skip_frames == 0 
         # TODO : remove the extra True condition
-        if time_len == 1 or True: 
+        if time_len == 1 : #or True : 
             self.GPU_image = theano.shared(np.zeros((num_batches * batch_size / skip_frames * time_len, 3, 80, 160)).astype('float32'))
             self.GPU_other = theano.shared(np.zeros((num_batches * batch_size / skip_frames * time_len, num_extra_features)).astype('float32'))
 
