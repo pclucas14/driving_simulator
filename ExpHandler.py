@@ -39,7 +39,7 @@ class ExpHandler():
         else : 
             raise Exception('unsupported image preprocessing')
         if real_img : 
-            saveImage(samples, self.exp_name + '/images' + '/real_' + str(self.epoch))
+            saveImage(samples, self.exp_name + '/images' + '/real_' + str(self.epoch), side=int(np.sqrt(self.params['batch_size'])))
         else : 
             saveImage(samples, self.exp_name + '/images' + '/' + extra + 'samples_' + str(self.epoch))
 
